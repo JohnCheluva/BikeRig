@@ -1,18 +1,18 @@
 bl_info = {
     "name": "BikeRig",
     "author": "Antigravity",
-    "version": (1, 0),
+    "version": (1, 2),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > BikeRig",
-    "description": "Auto-rigging tools for bikes (Wheels, Steering, Suspension, Chain)",
+    "description": "Auto-rigging tools for bikes (Launch Control Style)",
     "category": "Rigging",
 }
 
 import bpy
 from . import ui
-from .modules import wheels, steering, suspension, chain
+from . import core
 
-modules = [ui, wheels, steering, suspension, chain]
+modules = [ui, core]
 
 def register():
     for module in modules:
