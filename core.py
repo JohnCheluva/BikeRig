@@ -1,5 +1,6 @@
 import bpy
 import math
+import mathutils
 
 class BikeRig_OT_BuildRig(bpy.types.Operator):
     """Generate a complete rig from selected objects"""
@@ -51,16 +52,10 @@ class BikeRig_OT_BuildRig(bpy.types.Operator):
             
             bone = edit_bones.new(name)
             bone.head = target_obj.matrix_world.translation
-            # Default tail: Up 0.2m or along local Y? 
-            # For wheels: Tail should be along local X (axle). 
-            # For Frame: Up.
             
-            # Simple approach: Tail is Head + (0,0,0.2)
-            bone.tail = bone.head + bpy.mathutils.Vector((0, 0, 0.2))
-            
-            # Align bone orientation to object (Advanced: copy matrix)
-            # For now, let's keep them upright Z-up for simplicity, 
-            # or try to match object rotation if possible.
+            # Simple approach: Tail is Head + (0,0,0.2) (Upwards Z)
+            # Todo: Align bone Y axis to object forward? For now, world Z is up.
+            bone.tail = bone.head + mathutils.Vector((0, 0, 0.2))
             
             if parent_bone:
                 bone.parent = parent_bone
@@ -88,7 +83,6 @@ class BikeRig_OT_BuildRig(bpy.types.Operator):
             obj.parent = arm_obj
             obj.parent_type = 'BONE'
             obj.parent_bone = bone_name
-            # Keep transform
             obj.matrix_parent_inverse = arm_obj.matrix_world.inverted()
 
         parent_to_bone(props.frame, "frame")
@@ -96,8 +90,49 @@ class BikeRig_OT_BuildRig(bpy.types.Operator):
         parent_to_bone(props.handlebar, "handlebar")
         parent_to_bone(props.front_wheel, "f_wheel")
         parent_to_bone(props.back_wheel, "b_wheel")
+        
+        # 6. Auto-Rotation Drivers (Launch Control Style)
+        # Rot = -LocY / Radius
+        def add_wheel_driver(bone_name, wheel_obj):
+            if not wheel_obj: return
+            
+            # Calculate Radius (Height / 2) - Approximate from dimensions Z
+            radius = wheel_obj.dimensions.z / 2.0
+            if radius <= 0.01: radius = 0.3 # Fallback
+            
+            pbone = arm_obj.pose.bones.get(bone_name)
+            if not pbone: return
+            
+            # Add driver to Rotation X (Euler)
+            # We assume the wheel rolls around its local X axis.
+            # If the model is oriented differently, this might need adjustment.
+            # For standard bike rigs: X axis is usually the axle.
+            
+            pbone.rotation_mode = 'XYZ'
+            d = pbone.driver_add("rotation_euler", 0).driver # Index 0 is X
+            
+            d.type = 'SCRIPTED'
+            
+            # Variable: Root Location Y
+            var = d.variables.new()
+            var.name = "dist"
+            var.type = 'TRANSFORMS'
+            
+            t = var.targets[0]
+            t.id = arm_obj
+            t.bone_target = "root"
+            t.transform_type = 'LOC_Y'
+            t.transform_space = 'LOCAL_SPACE'
+            
+            # Expression: -dist / radius
+            # Negative because moving forward (Positive Y) usually means negative X rotation (Right Hand Rule)?
+            # Let's try negative.
+            d.expression = f"-dist / {radius:.4f}"
 
-        self.report({'INFO'}, "Bike Rig Created Successfully!")
+        add_wheel_driver("f_wheel", props.front_wheel)
+        add_wheel_driver("b_wheel", props.back_wheel)
+
+        self.report({'INFO'}, "Bike Rig Created with Drivers!")
         return {'FINISHED'}
 
 classes = [BikeRig_OT_BuildRig]
